@@ -1,16 +1,17 @@
-import corgietc as ct 
 import os
 import json
-import EXOSIMS.Prototypes.TargetList
-import EXOSIMS.Prototypes.TimeKeeping
 import copy
 import astropy.units as u
 import astropy.time as t
 import pandas as pd
+import sqlalchemy as sql
+import corgietc as ct
+import EXOSIMS.Prototypes.TargetList
+import EXOSIMS.Prototypes.TimeKeeping
 import roman_pointing as rp
 import corgisim as csm
 import corgidb as cdb
-import sqlalchemy as sql
+
 
 def select_ref_star(st_name: str, obs_start: t.Time, obs_duration: t.Time, engine: sql.engine.base.Engine) -> str:
     """Select refrence star given target and observation parameters
