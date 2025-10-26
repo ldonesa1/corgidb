@@ -25,10 +25,10 @@ def select_ref_star(st_name: str, obs_start: t.Time, obs_duration: t.Time, engin
     """
     # Connect to the DB and get tables
     metadata = sql.MetaData()
-    Stars = sql.Table('Stars', metadata, autoload_with=engine)
+    stars_table = sql.Table('Stars', metadata, autoload_with=engine)
     conn = engine.connect()
     # query for a Star with the correct st_name entry
-    stmt = sql.select(Stars).where(Stars.c.st_name == st_name)
+    stmt = sql.select(stars_table).where(stars_table.c.st_name == st_name)
     sci_target = conn.execute(stmt)
     # refStarCoverage in roman_pointing seems very similar? Are we allow to leverage or adapt that code? yes
     
