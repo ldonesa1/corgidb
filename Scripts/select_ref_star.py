@@ -19,6 +19,7 @@ def select_ref_star(st_name: str, obs_start: t.Time, obs_duration: t.Time, engin
         st_name (str): Target star name in db
         obs_start (astropy.time.Time): Start time of observation window
         obs_duration (astropy.time.Time): Duration of the observation window
+        engine (sql.engine.base.Engine): Sqlalchemy engine object that is connected to plandb
 
     Returns:
         str: Reference star name in db
