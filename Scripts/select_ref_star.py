@@ -3,6 +3,7 @@ import json
 import copy
 import astropy.units as u
 import astropy.time as t
+import astropy.coordinates as c
 import pandas as pd
 import sqlalchemy as sql
 import corgietc as ct
@@ -25,13 +26,33 @@ def select_ref_star(st_name: str, obs_start: t.Time, obs_duration: t.Time, engin
     Returns:
         str: Reference star name in db
     """
+    # Type checking for inputs and other generic error handling
+
     # Connect to the DB and get tables
     metadata = sql.MetaData()
     stars_table = sql.Table('Stars', metadata, autoload_with=engine)
+    # pass this connection to the query method to be used and then spun up and cleaned up in the calling method. 
     conn = engine.connect()
     # query for a Star with the correct st_name entry
     stmt = sql.select(stars_table).where(stars_table.c.st_name == st_name)
-    sci_target = conn.execute(stmt)
+    res = conn.execute(stmt)
+    # Test values/statements for making sure that little bits of the code work
+    obs_start = obs_start
+    obs_duration = obs_duration
+    sci_target = [dict(row.mapping)for row in res]
+    target_cords= c.SkyCoord(
+    sci_target["ra"].value.data[0],
+    sci_target["dec"].value.data[0],
+    unit=(sci_target["ra"].unit, sci_target["dec"].unit),
+    frame="icrs",
+    distance=c.Distance(parallax=sci_target["plx_value"].value.data[0] * sci_target["plx_value"].unit),
+    pm_ra_cosdec=sci_target["pmra"].value.data[0] * sci_target["pmra"].unit,
+    pm_dec=sci_target["pmdec"].value.data[0] * sci_target["pmdec"].unit,
+    radial_velocity=sci_target["rvz_radvel"].value.data[0] * sci_target["rvz_radvel"].unit,
+    equinox="J2000",
+    obstime="J2000",
+    ).transform_to(c.BarycentricMeanEcliptic)
+    ref_star = sci_target
     # refStarCoverage in roman_pointing seems very similar? Are we allow to leverage or adapt that code? yes
     
     # how tightly bound is the obvs time? If something starts ~5 days out of bounds but then comes into bounds do we care? treat the inputs as exact. Need down stream determination of observation window validity.  
@@ -45,18 +66,6 @@ def select_ref_star(st_name: str, obs_start: t.Time, obs_duration: t.Time, engin
 
     # Set Target coordinates:
     # This code is straight out of roman pointing and looks to do what we want. It is out of the demo ipynb, can be reused for setting targets coords and Area Bounds
-#    target = SkyCoord(
-#    res["ra"].value.data[0],
-#    res["dec"].value.data[0],
-#    unit=(res["ra"].unit, res["dec"].unit),
-#    frame="icrs",
-#    distance=Distance(parallax=res["plx_value"].value.data[0] * res["plx_value"].unit),
-#    pm_ra_cosdec=res["pmra"].value.data[0] * res["pmra"].unit,
-#    pm_dec=res["pmdec"].value.data[0] * res["pmdec"].unit,
-#    radial_velocity=res["rvz_radvel"].value.data[0] * res["rvz_radvel"].unit,
-#    equinox="J2000",
-#    obstime="J2000",
-#    ).transform_to(BarycentricMeanEcliptic)
 
 
 
