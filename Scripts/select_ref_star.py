@@ -24,8 +24,11 @@ def select_query_db(conn: sql.engine.base.Connection, stmt: sql.Select) -> pd.Da
     Returns:
         data (pd.DataFrame): dataframe containing the desired data
     """
+    #connect to db and run statement
     db_res = conn.execute(stmt)
+    #change return into a dataframe
     raw_data = pd.DataFrame([obj.__dict__ for obj in db_res])
+    #select only data thats not sqlalchemy objects and return them
     good_data = ~raw_data.columns.str.startswith('_sa_')
     data = raw_data.loc[:, good_data]
     return data
