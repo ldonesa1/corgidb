@@ -13,11 +13,22 @@ import roman_pointing as rp
 import corgisim as csm
 import corgidb as cdb
 
-#Simple wrapper function to return a datafra rather than an sql object
+#Simple wrapper function to return a dataframe rather than an sql object and clean up the sqlalchemy objects inside
 def select_query_db(conn: sql.engine.base.Connection, stmt: sql.Select) -> pd.DataFrame:
+    """Take db connection and select statment to return data from the db
+
+    Args:
+        conn (sql.engine.base.Connection): sqlalchemy connection object
+        stmt (sql.Select): sqlalchemy select statement for desired data
+
+    Returns:
+        data (pd.DataFrame): dataframe containing the desired data
+    """
     db_res = conn.execute(stmt)
-    res = pd.DataFrame([obj._dict_ for obj in db_res])
-    return res
+    raw_data = pd.DataFrame([obj.__dict__ for obj in db_res])
+    good_data = ~raw_data.columns.str.startswith('_sa_')
+    data = raw_data.loc[:, good_data]
+    return data
 
 def select_ref_star(st_name: str, obs_start: t.Time, obs_duration: t.Time, engine: sql.engine.base.Engine) -> str:
     """Select refrence star given target and observation parameters
@@ -40,7 +51,6 @@ def select_ref_star(st_name: str, obs_start: t.Time, obs_duration: t.Time, engin
     conn = engine.connect()
     # query for a Star with the correct st_name entry
     stmt = sql.select(stars_table).where(stars_table.c.st_name == st_name)
-
     # Test values/statements for making sure that little bits of the code work
     obs_start = obs_start
     obs_duration = obs_duration
