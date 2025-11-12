@@ -13,6 +13,11 @@ import roman_pointing as rp
 import corgisim as csm
 import corgidb as cdb
 
+#Simple wrapper function to return a datafra rather than an sql object
+def select_query_db(conn: sql.engine.base.Connection, stmt: sql.Select) -> pd.DataFrame:
+    db_res = conn.execute(stmt)
+    res = pd.DataFrame([obj._dict_ for obj in db_res])
+    return res
 
 def select_ref_star(st_name: str, obs_start: t.Time, obs_duration: t.Time, engine: sql.engine.base.Engine) -> str:
     """Select refrence star given target and observation parameters
@@ -35,11 +40,11 @@ def select_ref_star(st_name: str, obs_start: t.Time, obs_duration: t.Time, engin
     conn = engine.connect()
     # query for a Star with the correct st_name entry
     stmt = sql.select(stars_table).where(stars_table.c.st_name == st_name)
-    res = conn.execute(stmt)
+
     # Test values/statements for making sure that little bits of the code work
     obs_start = obs_start
     obs_duration = obs_duration
-    sci_target = [dict(row.mapping)for row in res]
+    sci_target = select_query_db(conn, stmt)
     target_cords = c.SkyCoord(
     sci_target["ra"].value.data[0],
     sci_target["dec"].value.data[0],
