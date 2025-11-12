@@ -31,7 +31,7 @@ def select_ref_star(st_name: str, obs_start: t.Time, obs_duration: t.Time, engin
     # Connect to the DB and get tables
     metadata = sql.MetaData()
     stars_table = sql.Table('Stars', metadata, autoload_with=engine)
-    # pass this connection to the query method to be used and then spun up and cleaned up in the calling method. 
+    # pass this connection to the query method to be used and then spun up and cleaned up in the calling method 
     conn = engine.connect()
     # query for a Star with the correct st_name entry
     stmt = sql.select(stars_table).where(stars_table.c.st_name == st_name)
@@ -40,7 +40,7 @@ def select_ref_star(st_name: str, obs_start: t.Time, obs_duration: t.Time, engin
     obs_start = obs_start
     obs_duration = obs_duration
     sci_target = [dict(row.mapping)for row in res]
-    target_cords= c.SkyCoord(
+    target_cords = c.SkyCoord(
     sci_target["ra"].value.data[0],
     sci_target["dec"].value.data[0],
     unit=(sci_target["ra"].unit, sci_target["dec"].unit),
@@ -67,8 +67,6 @@ def select_ref_star(st_name: str, obs_start: t.Time, obs_duration: t.Time, engin
     # Set Target coordinates:
     # This code is straight out of roman pointing and looks to do what we want. It is out of the demo ipynb, can be reused for setting targets coords and Area Bounds
 
-
-
         # Error handling here for dates where the target is not observable for bounding reasons at any point? (maybe just a warning about duration and time of issue) during the observation 
         # error handling for targets that are completely outside of the range of observability
 
@@ -83,6 +81,5 @@ def select_ref_star(st_name: str, obs_start: t.Time, obs_duration: t.Time, engin
     # Calculate the Delta pitch and delta Yaw (total combined angular seperation)
 
     # Find minimum entry for total angular seperation
-
 
     return ref_star
