@@ -1,6 +1,7 @@
 import os
 import json
 import copy
+import numpy as np
 import astropy.units as u
 import astropy.time as t
 import astropy.coordinates as c
@@ -9,20 +10,20 @@ import sqlalchemy as sql
 import corgietc as ct
 import EXOSIMS.Prototypes.TargetList
 import EXOSIMS.Prototypes.TimeKeeping
-import roman_pointing as rp
+from roman_pointing import roman_pointing as rp
 import corgisim as csm
 import corgidb as cdb
 
-#Simple wrapper function to return a dataframe rather than an sql object and clean up the sqlalchemy objects inside
+#Wrapper function to return a dataframe rather than an sql object and clean up the sqlalchemy objects inside
 def select_query_db(conn: sql.engine.base.Connection, stmt: sql.Select) -> pd.DataFrame:
     """Take db connection and select statment to return data from the db
 
     Args:
-        conn (sql.engine.base.Connection): sqlalchemy connection object
-        stmt (sql.Select): sqlalchemy select statement for desired data
+        conn (sqlalchemy.engine.base.Connection): sqlalchemy connection object
+        stmt (sqlalchemy.Select): sqlalchemy select statement for desired data
 
     Returns:
-        data (pd.DataFrame): dataframe containing the desired data
+        data (pandas.DataFrame): dataframe containing the desired data
     """
     #connect to db and run statement
     db_res = conn.execute(stmt)
@@ -33,7 +34,51 @@ def select_query_db(conn: sql.engine.base.Connection, stmt: sql.Select) -> pd.Da
     data = raw_data.loc[:, good_data]
     return data
 
-def select_ref_star(st_name: str, obs_start: t.Time, obs_duration: t.Time, engine: sql.engine.base.Engine) -> str:
+def check_pointing(tar: pd.DataFrame, obs_start: t.Time, obs_duration: t.TimeDelta) -> tuple[bool, list, list]:
+    """Check that the observation window defined for a stars data does not violate any constraints
+    
+    Args:
+        tar (pandas.DataFrame): Target star data defined as a DataFrame
+        obs_start (astropy.time.Time): Start time of the observation
+        obs_duration (astropy.time.Time): Duration of the observation
+    
+    Returns:
+        result (tuple[bool, list]): returns a boolean true/false if the observation is valid, and a list of pointings over the window
+    """
+    #New to data frames and not sure quite how the accessing is going to work. Guess we just gotta test it. Seems like you can call columns by name like a dict, could also just convert with the line below. 
+    #d_tar = tar.to_dict(orient='records')
+    
+    #need to check that all the required data came in with the dataframe, if there isn't a value for the data return error
+    # define descrete times to calculate angles over
+    times = obs_start + obs_duration * np.linspace(0, 100, 100)
+    # Build sky coord object for the target
+    tar_cords = c.SkyCoord(
+    tar["ra"].value.data[0],
+    tar["dec"].value.data[0],
+    unit=(tar["ra"].unit, tar["dec"].unit),
+    frame="icrs",
+    distance=c.Distance(parallax=tar["plx_value"].value.data[0] * tar["plx_value"].unit),
+    pm_ra_cosdec=tar["pmra"].value.data[0] * tar["pmra"].unit,
+    pm_dec=tar["pmdec"].value.data[0] * tar["pmdec"].unit,
+    radial_velocity=tar["rvz_radvel"].value.data[0] * tar["rvz_radvel"].unit,
+    equinox="J2000",
+    obstime="J2000",
+    ).transform_to(c.BarycentricMeanEcliptic)
+    #calculate angles of interest over the observation window 
+    sun_ang_targ, yaw_targ, pitch_targ, B_C_I_targ = rp.calcRomanAngles(
+    tar_cords, times, rp.getL2Positions(times)
+    )
+    #Convert angles to degrees
+    sun_ang_d_targ = sun_ang_targ.to(u.degree)
+    #Check the five degree sun angle constraint and set validity
+    if any((item > 54 ) & (item < 126) for item in sun_ang_d_targ):
+        valid = False
+    else:
+        valid = True
+    result = valid, sun_ang_targ, pitch_targ
+    return result
+
+def select_ref_star(st_name: str, obs_start: t.Time, obs_duration: t.TimeDelta, engine: sql.engine.base.Engine) -> str:
     """Select refrence star given target and observation parameters
 
     Args: 
@@ -55,29 +100,28 @@ def select_ref_star(st_name: str, obs_start: t.Time, obs_duration: t.Time, engin
     # query for a Star with the correct st_name entry
     stmt = sql.select(stars_table).where(stars_table.c.st_name == st_name)
     # Test values/statements for making sure that little bits of the code work
-    obs_start = obs_start
-    obs_duration = obs_duration
     sci_target = select_query_db(conn, stmt)
-    target_cords = c.SkyCoord(
-    sci_target["ra"].value.data[0],
-    sci_target["dec"].value.data[0],
-    unit=(sci_target["ra"].unit, sci_target["dec"].unit),
-    frame="icrs",
-    distance=c.Distance(parallax=sci_target["plx_value"].value.data[0] * sci_target["plx_value"].unit),
-    pm_ra_cosdec=sci_target["pmra"].value.data[0] * sci_target["pmra"].unit,
-    pm_dec=sci_target["pmdec"].value.data[0] * sci_target["pmdec"].unit,
-    radial_velocity=sci_target["rvz_radvel"].value.data[0] * sci_target["rvz_radvel"].unit,
-    equinox="J2000",
-    obstime="J2000",
-    ).transform_to(c.BarycentricMeanEcliptic)
-    ref_star = sci_target
-    # refStarCoverage in roman_pointing seems very similar? Are we allow to leverage or adapt that code? yes
-    
+    tar_val, tar_sun_angs, tar_pitch_angs = check_pointing(sci_target, obs_start, obs_duration)
+    if tar_val is False:
+        pass
+        # logic to handle a observation that is not valid
+    else:
+        pass
+        # Logic to start selecting reference stars
+    ref_star = sci_target["st_name"]
+
+
+    return ref_star
+
+
+
+
+
+
+
     # how tightly bound is the obvs time? If something starts ~5 days out of bounds but then comes into bounds do we care? treat the inputs as exact. Need down stream determination of observation window validity.  
 
     # Is this method responsible for checking the validity of the observation window supplied? Checking only availibility of target and reference given all constraints. 
-
-    # Blocking out code and pasting in relvent examples. 
 
     # search the HIP star catalog? (I think the database is named something else) by the name column looking for a match on the supplied name, currently st_name should be considered an exact match to a column
         # error handling for no name supplied, wrong data type supplied, no star found
@@ -99,5 +143,3 @@ def select_ref_star(st_name: str, obs_start: t.Time, obs_duration: t.Time, engin
     # Calculate the Delta pitch and delta Yaw (total combined angular seperation)
 
     # Find minimum entry for total angular seperation
-
-    return ref_star
