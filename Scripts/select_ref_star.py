@@ -4,17 +4,19 @@ import copy
 import numpy as np
 import astropy.units as u
 import astropy.time as t
+import astropy.table as tb
 import astropy.coordinates as c
 import pandas as pd
 import sqlalchemy as sql
 import corgietc as ct
+import matplotlib.pyplot as plt
 import EXOSIMS.Prototypes.TargetList
 import EXOSIMS.Prototypes.TimeKeeping
 from roman_pointing import roman_pointing as rp
 import corgisim as csm
-import corgidb as cdb
+from corgidb import ingest as cdb
 
-#Wrapper function to return a dataframe rather than an sql object and clean up the sqlalchemy objects inside
+# Wrapper function to return a dataframe rather than an sql object and clean up the sqlalchemy objects inside
 def select_query_db(conn: sql.engine.base.Connection, stmt: sql.Select) -> pd.DataFrame:
     """Take db connection and select statment to return data from the db
 
@@ -25,10 +27,8 @@ def select_query_db(conn: sql.engine.base.Connection, stmt: sql.Select) -> pd.Da
     Returns:
         data (pandas.DataFrame): dataframe containing the desired data
     """
-    #connect to db and run statement
-    db_res = conn.execute(stmt)
     #change return into a dataframe
-    raw_data = pd.DataFrame([obj.__dict__ for obj in db_res])
+    raw_data = pd.read_sql(stmt, conn)
     #select only data thats not sqlalchemy objects and return them
     good_data = ~raw_data.columns.str.startswith('_sa_')
     data = raw_data.loc[:, good_data]
@@ -50,17 +50,22 @@ def check_pointing(tar: pd.DataFrame, obs_start: t.Time, obs_duration: t.TimeDel
     
     #need to check that all the required data came in with the dataframe, if there isn't a value for the data return error
     # define descrete times to calculate angles over
-    times = obs_start + obs_duration * np.linspace(0, 100, 100)
-    # Build sky coord object for the target
+    times = obs_start + obs_duration * np.linspace(0, 1, 100)
+    #atar = tb.Table.from_pandas(tar)
+    # Build sky coord object for the target, need to know what comes out of sinbad to convert
+    #ra = atar["ra"] * u.radian
+    #ra = ra.to(u.degree)
+    #dec = atar["dec"] * u.radian
+    #dec = dec.to(u.degree)
     tar_cords = c.SkyCoord(
-    tar["ra"].value.data[0],
-    tar["dec"].value.data[0],
-    unit=(tar["ra"].unit, tar["dec"].unit),
+    tar.loc[0, "ra"] * u.degree, #is rads here, needs to convert to degrees.
+    tar.loc[0, "dec"] * u.degree, # is rads here needs to conver to deg
+    unit=(u.degree, u.degree),
     frame="icrs",
-    distance=c.Distance(parallax=tar["plx_value"].value.data[0] * tar["plx_value"].unit),
-    pm_ra_cosdec=tar["pmra"].value.data[0] * tar["pmra"].unit,
-    pm_dec=tar["pmdec"].value.data[0] * tar["pmdec"].unit,
-    radial_velocity=tar["rvz_radvel"].value.data[0] * tar["rvz_radvel"].unit,
+    distance=tar.loc[0,"sy_dist"] * u.parsec, # correct
+    pm_ra_cosdec=tar.loc[0,"sy_pmra"] * u.milliarcsecond / u.year, # is in miliarcsecs / year
+    pm_dec=tar.loc[0,"sy_pmdec"] * u.milliarcsecond / u.year, # as above
+    radial_velocity=tar.loc[0, "st_radv"] * u.km / u.second, # correct
     equinox="J2000",
     obstime="J2000",
     ).transform_to(c.BarycentricMeanEcliptic)
@@ -70,12 +75,13 @@ def check_pointing(tar: pd.DataFrame, obs_start: t.Time, obs_duration: t.TimeDel
     )
     #Convert angles to degrees
     sun_ang_d_targ = sun_ang_targ.to(u.degree)
+    pitch_d_targ = pitch_targ.to(u.degree)
     #Check the five degree sun angle constraint and set validity
-    if any((item > 54 ) & (item < 126) for item in sun_ang_d_targ):
+    if any((item < 54 * u.degree) or (item > 126 * u.degree) for item in sun_ang_d_targ):
         valid = False
     else:
         valid = True
-    result = valid, sun_ang_targ, pitch_targ
+    result = valid, sun_ang_d_targ, pitch_d_targ
     return result
 
 def select_ref_star(st_name: str, obs_start: t.Time, obs_duration: t.TimeDelta, engine: sql.engine.base.Engine) -> str:
@@ -113,9 +119,25 @@ def select_ref_star(st_name: str, obs_start: t.Time, obs_duration: t.TimeDelta, 
 
     return ref_star
 
-
-
-
+# everything under here is testing and notes 
+st_name = "47 Uma"
+eng = cdb.gen_engine('plandb_user', 'plandb_scratch')
+metadata = sql.MetaData()
+stars_table = sql.Table('Stars', metadata, autoload_with=eng)
+conn = eng.connect()
+stmt = sql.select(stars_table).where(stars_table.c.st_name == st_name)
+data = select_query_db(conn, stmt)
+print(data["dec"])
+t_str = ["2027-01-01T00:00:00.0"]
+o_s = t.Time(t_str, format="isot", scale="utc")
+o_d = 365 * u.d
+val, sun_ang, pitch_ang = check_pointing(data, o_s, o_d)
+t = np.linspace(0,365,100)
+print(val)
+print(sun_ang)
+plt.plot(t, sun_ang)
+plt.show()
+print(pitch_ang)
 
 
 
