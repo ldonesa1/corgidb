@@ -34,7 +34,7 @@ def select_query_db(conn: sql.engine.base.Connection, stmt: sql.Select) -> pd.Da
     data = raw_data.loc[:, good_data]
     return data
 
-def check_pointing(tar: pd.DataFrame, obs_start: t.Time, obs_duration: t.TimeDelta) -> tuple[bool, list, list]:
+def check_pointing(tar: pd.DataFrame, obs_start: t.Time, obs_duration: t.TimeDelta, slices=100) -> tuple[bool, list, list]:
     """Check that the observation window defined for a stars data does not violate any constraints
     
     Args:
@@ -43,14 +43,14 @@ def check_pointing(tar: pd.DataFrame, obs_start: t.Time, obs_duration: t.TimeDel
         obs_duration (astropy.time.Time): Duration of the observation
     
     Returns:
-        result (tuple[bool, list]): returns a boolean true/false if the observation is valid, and a list of pointings over the window
+        result (tuple[bool, list, list]): returns a boolean true/false if the observation is valid, and a list of pointings over the window for sun and pitch angles
     """
     #New to data frames and not sure quite how the accessing is going to work. Guess we just gotta test it. Seems like you can call columns by name like a dict, could also just convert with the line below. 
     #d_tar = tar.to_dict(orient='records')
     
     #need to check that all the required data came in with the dataframe, if there isn't a value for the data return error
     # define descrete times to calculate angles over
-    times = obs_start + obs_duration * np.linspace(0, 1, 100)
+    times = obs_start + obs_duration * np.linspace(0, 1, slices)
     #atar = tb.Table.from_pandas(tar)
     # Build sky coord object for the target, need to know what comes out of sinbad to convert
     #ra = atar["ra"] * u.radian
@@ -109,14 +109,28 @@ def select_ref_star(st_name: str, obs_start: t.Time, obs_duration: t.TimeDelta, 
     sci_target = select_query_db(conn, stmt)
     tar_val, tar_sun_angs, tar_pitch_angs = check_pointing(sci_target, obs_start, obs_duration)
     if tar_val is False:
-        pass
+        ref_star = "Observation window violates Solar angle Constraint"
+        print(ref_star)
         # logic to handle a observation that is not valid
     else:
-        pass
+        ref_star = ""
+        ref_grade = ['A','B','C']
+        i = 0
+        while ref_star is "" and i < 3:
+            cur_ref_grade = ref_grade[i]
+            ref_stmt= sql.select(stars_table).where(stars_table.c.st_psfgrade == cur_ref_grade)
+            ref_stars_data = select_query_db(conn, ref_stmt)
+            for record in ref_stars_data.to_dict(orient="records"):
+                cur_tar_star = pd.DataFrame.from_dict(record)
+                ref_val, ref_sun_angs, ref_pitch_angs = check_pointing(cur_tar_star, obs_start, obs_duration)
+                if ref_val:
+                    del_pitch = np.array(tar_pitch_angs) - np.array(ref_pitch_angs)
+                    max_pitch = np.abs(np.max(del_pitch))
+                    if max_pitch < 5:
+                        ref_star = record.loc[0, "st_name"]
+                        i = 3
+            i = i + 1
         # Logic to start selecting reference stars
-    ref_star = sci_target["st_name"]
-
-
     return ref_star
 
 # everything under here is testing and notes 
@@ -130,7 +144,7 @@ data = select_query_db(conn, stmt)
 print(data["dec"])
 t_str = ["2027-01-01T00:00:00.0"]
 o_s = t.Time(t_str, format="isot", scale="utc")
-o_d = 365 * u.d
+o_d = 365 * u.day
 val, sun_ang, pitch_ang = check_pointing(data, o_s, o_d)
 t = np.linspace(0,365,100)
 print(val)
@@ -139,7 +153,7 @@ plt.plot(t, sun_ang)
 plt.show()
 print(pitch_ang)
 
-
+# Ecliptic LAtatiude is a good test of pointing
 
     # how tightly bound is the obvs time? If something starts ~5 days out of bounds but then comes into bounds do we care? treat the inputs as exact. Need down stream determination of observation window validity.  
 
