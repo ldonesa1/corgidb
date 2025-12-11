@@ -1,3 +1,4 @@
+"""Module For Refrence Star selection and supporting funcitons"""
 import numpy as np
 import astropy.units as u
 import astropy.time as t
@@ -5,7 +6,6 @@ import astropy.coordinates as c
 import pandas as pd
 import sqlalchemy as sql
 from roman_pointing import roman_pointing as rp
-from corgidb import ingest as cdb
 
 # Wrapper function to return a dataframe rather than an sql object and clean up the sqlalchemy objects inside
 def select_query_db(conn: sql.engine.base.Connection, stmt: sql.Select) -> pd.DataFrame:
