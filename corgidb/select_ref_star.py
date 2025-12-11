@@ -1,19 +1,10 @@
-import os
-import json
-import copy
 import numpy as np
 import astropy.units as u
 import astropy.time as t
-import astropy.table as tb
 import astropy.coordinates as c
 import pandas as pd
 import sqlalchemy as sql
-import corgietc as ct
-import matplotlib.pyplot as plt
-import EXOSIMS.Prototypes.TargetList
-import EXOSIMS.Prototypes.TimeKeeping
 from roman_pointing import roman_pointing as rp
-import corgisim as csm
 from corgidb import ingest as cdb
 
 # Wrapper function to return a dataframe rather than an sql object and clean up the sqlalchemy objects inside
@@ -45,18 +36,7 @@ def check_pointing(tar: pd.DataFrame, obs_start: t.Time, obs_duration: t.TimeDel
     Returns:
         result (tuple[bool, list, list]): returns a boolean true/false if the observation is valid, and a list of pointings over the window for sun and pitch angles
     """
-    #New to data frames and not sure quite how the accessing is going to work. Guess we just gotta test it. Seems like you can call columns by name like a dict, could also just convert with the line below. 
-    #d_tar = tar.to_dict(orient='records')
-    
-    #need to check that all the required data came in with the dataframe, if there isn't a value for the data return error
-    # define descrete times to calculate angles over
     times = obs_start + obs_duration * np.linspace(0, 1, slices)
-    #atar = tb.Table.from_pandas(tar)
-    # Build sky coord object for the target, need to know what comes out of sinbad to convert
-    #ra = atar["ra"] * u.radian
-    #ra = ra.to(u.degree)
-    #dec = atar["dec"] * u.radian
-    #dec = dec.to(u.degree)
     tar_cords = c.SkyCoord(
     tar.loc[0, "ra"] * u.degree, #is rads here, needs to convert to degrees.
     tar.loc[0, "dec"] * u.degree, # is rads here needs to conver to deg
@@ -130,52 +110,7 @@ def select_ref_star(st_name: str, obs_start: t.Time, obs_duration: t.TimeDelta, 
                         ref_star = record.loc[0, "st_name"]
                         i = 3
             i = i + 1
+        if ref_star == "":
+            ref_star = f"No refrence star of class A, B, or C was found for {st_name} between {obs_start} and {obs_start+obs_duration}"
         # Logic to start selecting reference stars
     return ref_star
-
-# everything under here is testing and notes 
-st_name = "47 Uma"
-eng = cdb.gen_engine('plandb_user', 'plandb_scratch')
-metadata = sql.MetaData()
-stars_table = sql.Table('Stars', metadata, autoload_with=eng)
-conn = eng.connect()
-stmt = sql.select(stars_table).where(stars_table.c.st_name == st_name)
-data = select_query_db(conn, stmt)
-print(data["dec"])
-t_str = ["2027-01-01T00:00:00.0"]
-o_s = t.Time(t_str, format="isot", scale="utc")
-o_d = 365 * u.day
-val, sun_ang, pitch_ang = check_pointing(data, o_s, o_d)
-t = np.linspace(0,365,100)
-print(val)
-print(sun_ang)
-plt.plot(t, sun_ang)
-plt.show()
-print(pitch_ang)
-
-# Ecliptic LAtatiude is a good test of pointing
-
-    # how tightly bound is the obvs time? If something starts ~5 days out of bounds but then comes into bounds do we care? treat the inputs as exact. Need down stream determination of observation window validity.  
-
-    # Is this method responsible for checking the validity of the observation window supplied? Checking only availibility of target and reference given all constraints. 
-
-    # search the HIP star catalog? (I think the database is named something else) by the name column looking for a match on the supplied name, currently st_name should be considered an exact match to a column
-        # error handling for no name supplied, wrong data type supplied, no star found
-
-    # Set Target coordinates:
-    # This code is straight out of roman pointing and looks to do what we want. It is out of the demo ipynb, can be reused for setting targets coords and Area Bounds
-
-        # Error handling here for dates where the target is not observable for bounding reasons at any point? (maybe just a warning about duration and time of issue) during the observation 
-        # error handling for targets that are completely outside of the range of observability
-
-    # Construct bounded set of reference stars
-    #  
-    # Area of observability (5 deg, Solar, and roll? constraints) Are these seperate columns?
-    # create an sql query that searches first for class A then B then C stars bounded by the coordinates that define our AOO
-    # Query DB for all refs and then compute location and 
-
-    # Convert the DB return for the highest class of star found into a data frame
-
-    # Calculate the Delta pitch and delta Yaw (total combined angular seperation)
-
-    # Find minimum entry for total angular seperation
